@@ -53,6 +53,15 @@ class HomePage:
     SEARCH_BUTTON = (
         By.ID, "search_btn"
     )
+    SEARCH_RESULT_HEADING = (
+        By.XPATH,
+        "//h1"
+    )
+
+    SEARCH_SUGGESTION_ITEM = (
+        By.XPATH,
+        "//ul[contains(@class,'srch_lst')]//li"
+    )
 
     # ===== Actions =====
     def search_stock(self, stock_name):
@@ -108,3 +117,19 @@ class HomePage:
         self.wait.until(
             EC.element_to_be_clickable(self.LOGIN_OPTION)
         ).click()
+
+    def search_stock(self, stock_name):
+        search_box = self.wait.until(
+            EC.visibility_of_element_located(self.SEARCH_INPUT)
+        )
+        search_box.clear()
+        search_box.send_keys(stock_name)
+
+        # Wait for auto-suggestion and click first item
+        self.wait.until(
+            EC.visibility_of_element_located(self.SEARCH_SUGGESTION_ITEM)
+        )
+        self.wait.until(
+            EC.element_to_be_clickable(self.SEARCH_SUGGESTION_ITEM)
+        ).click()
+
