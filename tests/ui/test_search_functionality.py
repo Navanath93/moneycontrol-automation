@@ -11,8 +11,7 @@ def test_search_stock_by_name(driver):
     stock_name = "Reliance"
     home.search_stock(stock_name)
 
-    # Strong assertion
-    assert stock_name.lower() in driver.title.lower()
+    assert stock_name.lower() in driver.current_url.lower()
 
 
 @pytest.mark.ui
@@ -27,10 +26,8 @@ def test_search_stocks_from_csv(driver):
 
     for row in test_data:
         stock = row.get("stock")
-
         if not stock:
             continue
 
         home.search_stock(stock)
-
-        assert stock.lower() in driver.title.lower()
+        assert stock.lower() in driver.current_url.lower()
