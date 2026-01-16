@@ -9,5 +9,7 @@ def test_search_left_panel_options_are_clickable(driver):
 
     home.search_stock("Reliance")
 
-    assert home.are_left_panel_options_clickable(), \
-        "One or more left panel search options are not clickable"
+    assert home.are_left_panel_options_clickable(), (
+        "One or more left panel options are not clickable"
+    )
+
