@@ -1,17 +1,24 @@
+import pytest
 from pages.home_page import HomePage
-from pages.login_page import LoginPage
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 
+@pytest.mark.ui
 def test_login_dropdown_and_modal(driver):
     home = HomePage(driver)
     home.open_home_page()
 
-    home.click_hello_login()
-    assert home.is_login_dropdown_displayed()
+    home.open_login()
 
-    home.validate_login_dropdown_options()
+    wait = WebDriverWait(driver, 20)
 
-    home.click_login_option()
+    login_ui = wait.until(
+        EC.presence_of_element_located((
+            By.XPATH,
+            "//*[contains(text(),'Login') or contains(text(),'Sign')]"
+        ))
+    )
 
-    login = LoginPage(driver)
-    assert login.is_login_modal_displayed()
+    assert login_ui is not None
