@@ -21,7 +21,6 @@ def driver(request):
         pass
 
 
-
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
     outcome = yield
