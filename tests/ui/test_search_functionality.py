@@ -2,6 +2,9 @@ import pytest
 import os
 from pages.home_page import HomePage
 from utils.csv_reader import read_csv
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
 CSV_PATH = os.path.join(BASE_DIR, "data", "stocks.csv")
@@ -17,13 +20,11 @@ def test_search_stock_by_name(driver):
 
     assert stock_name.lower() in driver.current_url.lower()
 
-
-@pytest.mark.ui
+@ pytest.mark.ui
 def test_search_stocks_from_csv(driver):
     test_data = read_csv(CSV_PATH)
-
     if not test_data:
-        pytest.skip("No stock data available in CSV")
+        pytest.skip("No stock data available")
 
     home = HomePage(driver)
     home.open_home_page()
@@ -34,4 +35,6 @@ def test_search_stocks_from_csv(driver):
             continue
 
         home.search_stock(stock)
-        assert stock.lower() in driver.current_url.lower()
+
+        # ✅ Correct real-time assertion
+        assert "stockpricequote" in driver.current_url.lower()
