@@ -1,11 +1,13 @@
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.common.exceptions import TimeoutException
-import time
-from selenium.webdriver.support.ui import WebDriverWait
 from pages.base_page import BasePage
 from config.config import BASE_URL
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.common.exceptions import StaleElementReferenceException
+from selenium.webdriver.common.keys import Keys
+import time
 
 
 class HomePage(BasePage):
@@ -24,7 +26,12 @@ class HomePage(BasePage):
         By.XPATH,
         "//div[@id='autosuggestlist']//ul//li//a"
     )
+    SEARCH_INPUT = (By.ID, "search_str")
 
+    SEARCH_SUGGESTIONS = (
+        By.CSS_SELECTOR,
+        "ul.srch_rslt li, .srch_cat li, div.sugbox li"
+    )
 
     # ===== Login =====
     HELLO_LOGIN = (
@@ -82,6 +89,24 @@ class HomePage(BasePage):
     USERNAME_INPUT = (
         By.XPATH,
         "//input[@type='email' or @name='email']"
+    )
+
+    AUTOSUGGEST_ITEMS = (
+        By.XPATH,
+        "//ul[contains(@class,'srch_lst')]//li"
+    )
+
+
+    # Left panel options after search
+    LEFT_PANEL_OPTIONS = (
+        By.CSS_SELECTOR,
+        ".srch_cat li, .srch_cat a"
+    )
+
+    # Right side search results
+    RIGHT_PANEL_RESULTS = (
+        By.CSS_SELECTOR,
+        ".srch_rslt li a"
     )
 
     def __init__(self, driver):
@@ -155,39 +180,36 @@ class HomePage(BasePage):
 
     # ===== Search actions =====
     def search_stock(self, stock_name):
-        self.send_keys(self.SEARCH_INPUT, stock_name)
-
-        wait = WebDriverWait(self.driver, 20)
-
-        # Quotes tab may already be active, so guard click
-        try:
-            quotes_tab = wait.until(
-                EC.element_to_be_clickable(self.QUOTES_TAB)
-            )
-            self.driver.execute_script(
-                "arguments[0].click();", quotes_tab
-            )
-        except Exception:
-            pass  # already active
-
-        # Wait for at least one visible result
-        results = wait.until(
-            EC.visibility_of_any_elements_located(self.RESULT_LINKS)
+        search_box = self.wait.until(
+            EC.visibility_of_element_located(self.SEARCH_INPUT)
         )
+        search_box.clear()
+        search_box.send_keys(stock_name)
 
-        for link in results:
-            if link.is_displayed():
-                self.driver.execute_script(
-                    "arguments[0].scrollIntoView({block:'center'});", link
-                )
-                self.driver.execute_script(
-                    "arguments[0].click();", link
-                )
-                return
+        wait = WebDriverWait(self.driver, 15)
 
-        raise AssertionError(
-            f"No clickable Quotes result found for stock: {stock_name}"
-        )
+        end_time = time.time() + 15
+        while time.time() < end_time:
+            try:
+                results = wait.until(
+                    EC.presence_of_all_elements_located(self.RESULT_LINKS)
+                )
+
+                for _ in range(len(results)):
+                    try:
+                        results = self.driver.find_elements(*self.RESULT_LINKS)
+                        if results:
+                            self.driver.execute_script(
+                                "arguments[0].click();", results[0]
+                            )
+                            return
+                    except StaleElementReferenceException:
+                        continue
+
+            except Exception:
+                time.sleep(0.5)
+
+        raise AssertionError(f"No clickable result found for {stock_name}")
 
     # ===== Left panel validation =====
     def are_left_panel_options_clickable(self):
@@ -238,4 +260,79 @@ class HomePage(BasePage):
         )
 
         return sign_in.is_displayed() and sign_up.is_displayed()
+
+    def search_with_hover(self, keyword):
+        search = WebDriverWait(self.driver, 10).until(
+            EC.element_to_be_clickable(self.SEARCH_INPUT)
+        )
+        search.clear()
+        search.send_keys(keyword)
+
+        wait = WebDriverWait(self.driver, 10)
+
+        suggestions = wait.until(
+            EC.presence_of_all_elements_located(self.SEARCH_SUGGESTIONS)
+        )
+
+        # Re-fetch elements before action to avoid stale reference
+        for _ in range(3):
+            try:
+                first_item = suggestions[0]
+                ActionChains(self.driver).move_to_element(first_item).click().perform()
+                return True
+            except StaleElementReferenceException:
+                suggestions = self.driver.find_elements(*self.SEARCH_SUGGESTIONS)
+
+        return False
+
+    def trigger_search_suggestions(self, keyword):
+        search = WebDriverWait(self.driver, 10).until(
+            EC.visibility_of_element_located(self.SEARCH_INPUT)
+        )
+        search.clear()
+        search.send_keys(keyword)
+
+        try:
+            WebDriverWait(self.driver, 10).until(
+                lambda d: len(d.find_elements(*self.SEARCH_SUGGESTIONS)) > 0
+            )
+            return True
+        except TimeoutException:
+            return False
+
+    def get_left_panel_options(self):
+        return [
+            el for el in self.driver.find_elements(
+                By.CSS_SELECTOR, ".srch_cat li a"
+            )
+            if el.is_displayed()
+        ]
+
+    def get_right_panel_results(self):
+        return [
+            el for el in self.driver.find_elements(
+                By.CSS_SELECTOR, ".srch_rslt li a"
+            )
+            if el.is_displayed()
+        ]
+
+    def click_element_js(self, element):
+        self.driver.execute_script(
+            "arguments[0].scrollIntoView(true);", element
+        )
+        self.driver.execute_script(
+            "arguments[0].click();", element
+        )
+
+    def get_all_search_suggestions(self):
+        return self.driver.find_elements(
+            By.CSS_SELECTOR,
+            "ul.srch_rslt li, .srch_cat li, div.sugbox li"
+        )
+
+    def get_search_suggestions(self):
+        return self.driver.find_elements(
+            By.CSS_SELECTOR,
+            "ul.srch_rslt li, .srch_cat li, div.sugbox li"
+        )
 
