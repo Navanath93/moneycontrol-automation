@@ -76,10 +76,14 @@ class LoginPage:
         ).click()
 
     def login_with_password(self, username, password):
-        """
-        Password handling untouched, as requested
-        """
-        self.switch_to_password_login()
+
+        WebDriverWait(self.driver, 20).until(
+            EC.frame_to_be_available_and_switch_to_it(self.LOGIN_IFRAME)
+        )
+
+        self.wait.until(
+            EC.element_to_be_clickable(self.PASSWORD_TAB)
+        ).click()
 
         self.wait.until(
             EC.visibility_of_element_located(self.USERNAME_INPUT)
@@ -92,3 +96,10 @@ class LoginPage:
         self.driver.find_element(
             *self.LOGIN_BUTTON
         ).click()
+
+        self.driver.switch_to.default_content()
+
+
+
+
+

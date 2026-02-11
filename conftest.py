@@ -10,6 +10,7 @@ def pytest_addoption(parser):
 
 @pytest.fixture(scope="function")
 def driver(request):
+
     browser = request.config.getoption("--browser")
     driver = get_driver(browser)
 
@@ -26,7 +27,6 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     rep = outcome.get_result()
 
-    # Only act on real test failures
     if rep.when != "call" or not rep.failed:
         return
 
@@ -34,7 +34,6 @@ def pytest_runtest_makereport(item, call):
     if not driver:
         return
 
-    # If browser session is already gone, do nothing
     if not hasattr(driver, "session_id") or driver.session_id is None:
         return
 
@@ -49,10 +48,8 @@ def pytest_runtest_makereport(item, call):
             screenshots_dir, f"{item.name}_{timestamp}.png"
         )
 
-        # Hard timeout protection
         driver.set_script_timeout(5)
         driver.save_screenshot(screenshot_path)
 
     except Exception:
-        # NEVER allow screenshot problems to crash pytest
         pass
