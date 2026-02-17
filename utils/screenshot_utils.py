@@ -2,7 +2,7 @@ import os
 from datetime import datetime
 
 def take_screenshot(driver, name="screenshot"):
-    screenshots_dir = os.path.join(os.getcwd(), "screenshots", "manual")
+    screenshots_dir = os.path.join(os.getcwd(), "reports", "screenshots", "manual")
     os.makedirs(screenshots_dir, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")

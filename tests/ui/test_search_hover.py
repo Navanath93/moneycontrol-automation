@@ -1,39 +1,36 @@
 import pytest
 from pages.home_page import HomePage
 
+
 @pytest.mark.ui
 def test_search_autosuggest_hover_and_click(driver):
     home = HomePage(driver)
     home.open_home_page()
 
-    if not home.trigger_search_suggestions("Reliance"):
-        pytest.xfail("Autosuggest not available in this session")
+    # Validate autosuggest loads
+    assert home.trigger_search_suggestions("Reliance"), \
+        "Autosuggest did not load"
 
-    assert home.search_with_hover("Reliance")
+    # Validate hover and click works
+    assert home.search_with_hover("Reliance"), \
+        "Autosuggest hover click failed"
 
 
-
-
+@pytest.mark.ui
 def test_search_hover_left_and_right_panels(driver):
     home = HomePage(driver)
     home.open_home_page()
 
-    suggestions_loaded = home.trigger_search_suggestions("Reliance")
-
-    if not suggestions_loaded:
-        pytest.xfail(
-            "Autosuggest panels are inconsistent on Moneycontrol "
-            "(known production behavior)"
-        )
+    # Ensure autosuggest appears
+    assert home.trigger_search_suggestions("Reliance"), \
+        "Autosuggest panel did not appear"
 
     suggestions = home.get_search_suggestions()
-    assert suggestions, "Suggestions list empty when panel appeared"
+    assert suggestions, "Suggestions list empty"
 
     for item in suggestions:
         assert item.is_displayed()
 
-# Business expectation: autosuggest must appear for valid keywords
-# Known instability exists, but this test enforces requirement
 
 @pytest.mark.strict
 def test_search_hover_panels_must_appear(driver):
@@ -43,5 +40,3 @@ def test_search_hover_panels_must_appear(driver):
     assert home.trigger_search_suggestions("Reliance"), (
         "Search autosuggest panels did not appear"
     )
-
-
