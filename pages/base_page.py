@@ -1,37 +1,71 @@
+import logging
+from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from selenium.common.exceptions import TimeoutException, NoSuchElementException
+from utils.popup_handler import PopupHandler
+import os
 
+logger = logging.getLogger(__name__)
 
 class BasePage:
     """
-    BasePage contains only reusable Selenium actions.
-    No page-specific locators.
-    No business logic.
+    BasePage contains reusable Selenium actions and integrated diagnostic logic.
     """
 
-    def __init__(self, driver, timeout=20):
+    def __init__(self, driver, timeout=15):
         self.driver = driver
         self.wait = WebDriverWait(driver, timeout)
+        self.popup_handler = PopupHandler(driver)
 
     def click(self, locator):
-        self.wait.until(
-            EC.element_to_be_clickable(locator)
-        ).click()
+        try:
+            # High-performance wait for clickability
+            element = self.wait.until(EC.element_to_be_clickable(locator))
+            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+            element.click()
+        except Exception as e:
+            logger.warning(f"Interaction failed for {locator}. Attempting recovery...")
+            self.popup_handler.handle_potential_popups()
+            
+            # Retry mechanism
+            try:
+                element = self.wait.until(EC.element_to_be_clickable(locator))
+                self.driver.execute_script("arguments[0].click();", element) # Use JS click for reliability on retry
+                logger.info("Recovered and clicked via retry.")
+            except Exception:
+                raise e
 
     def send_keys(self, locator, value):
-        element = self.wait.until(
-            EC.presence_of_element_located(locator)
-        )
+        try:
+            element = self.wait.until(EC.visibility_of_element_located(locator))
+            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+            element.clear()
+            element.send_keys(value)
+        except Exception as e:
+            logger.warning(f"Input failed for {locator}. Attempting recovery...")
+            self.popup_handler.handle_potential_popups()
+            try:
+                # Use presence first on retry, then visibility
+                element = self.wait.until(EC.presence_of_element_located(locator))
+                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+                element.clear()
+                element.send_keys(value)
+            except Exception:
+                logger.error(f"Failed to send keys to {locator} after recovery effort.")
+                raise e
 
-        self.driver.execute_script(
-            "arguments[0].value = '';", element
-        )
-        element.send_keys(value)
+    def is_visible(self, locator, timeout=None):
+        wait = self.wait if timeout is None else WebDriverWait(self.driver, timeout)
+        try:
+            return wait.until(
+                EC.visibility_of_element_located(locator)
+            ).is_displayed()
+        except:
+            return False
 
-    def is_visible(self, locator):
-        return self.wait.until(
-            EC.visibility_of_element_located(locator)
-        ).is_displayed()
+    def switch_to_default(self):
+        self.driver.switch_to.default_content()
 
     def get_element(self, locator):
         return self.wait.until(

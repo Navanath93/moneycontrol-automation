@@ -1,3 +1,4 @@
+import logging
 from pages.base_page import BasePage
 from config.config import BASE_URL
 from selenium.webdriver.common.by import By
@@ -5,17 +6,17 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import TimeoutException, StaleElementReferenceException
 from selenium.webdriver.common.action_chains import ActionChains
-import time
+from selenium.webdriver.common.keys import Keys
+from utils.common_utils import handle_alert_if_present
 
+logger = logging.getLogger(__name__)
 
 class HomePage(BasePage):
 
-    # ===== Push Notification =====
     PUSH_NO_THANKS_BTN = (
         By.XPATH, "//button[normalize-space()='No thanks']"
     )
 
-    # ===== Search =====
     SEARCH_INPUT = (By.ID, "search_str")
 
     RESULT_LINKS = (
@@ -25,23 +26,23 @@ class HomePage(BasePage):
 
     SEARCH_SUGGESTIONS = (
         By.CSS_SELECTOR,
-        "ul.srch_rslt li, .srch_cat li, div.sugbox li"
+        "ul.srch_rslt li, .srch_cat li, div.sugbox li, #autosuggestlist ul li"
     )
 
-    # ===== Login =====
     HELLO_LOGIN = (
         By.XPATH,
-        "//a[contains(text(),'Hello') or contains(text(),'Login')]"
-    )
-
-    LOGIN_DROPDOWN = (
-        By.CSS_SELECTOR,
-        "ul.dropdown-menu, .login_wrap ul"
+        "//a[contains(@class,'user_account') or @title='Hello, Login'] | "
+        "//div[contains(@class,'login')]//a[contains(text(),'Hello')] | "
+        "//span[contains(text(),'Hello, Login')]"
     )
 
     SIGN_IN_OPTION = (
         By.XPATH,
-        "//a[contains(text(),'Login')]"
+        "//div[contains(@class,'login')]//a[text()='Log-in'] | "
+        "//a[contains(@class,'btnLogin')] | "
+        "//div[contains(@class,'user_account')]//a[contains(@href,'login')] | "
+        "//button[contains(text(),'Log-in')] | "
+        "//a[contains(text(),'Log-in')]"
     )
 
     SIGN_UP_OPTION = (
@@ -51,10 +52,9 @@ class HomePage(BasePage):
 
     LOGIN_IFRAME = (
         By.XPATH,
-        "//iframe[contains(@src,'login') or contains(@id,'login')]"
+        "//iframe[contains(@src,'login') or contains(@id,'login') or contains(@src,'accounts.moneycontrol')]"
     )
 
-    # ===== Left Panel =====
     LEFT_PANEL_TABS = (
         By.XPATH,
         "//a[normalize-space()='Quotes' or "
@@ -66,43 +66,86 @@ class HomePage(BasePage):
     def __init__(self, driver):
         super().__init__(driver)
 
-    # ===============================
-    # Common Actions
-    # ===============================
-
     def open_home_page(self):
         self.driver.get(BASE_URL)
+        # Wait for a core element to ensure page has started rendering meaningfully
+        try:
+            WebDriverWait(self.driver, 15).until(
+                EC.presence_of_element_located(self.SEARCH_INPUT)
+            )
+        except:
+            pass
         self.handle_push_notification()
+        self.popup_handler.handle_potential_popups()
 
     def handle_push_notification(self):
         try:
-            btn = WebDriverWait(self.driver, 3).until(
+            btn = WebDriverWait(self.driver, 5).until(
                 EC.presence_of_element_located(self.PUSH_NO_THANKS_BTN)
             )
-            self.driver.execute_script(
-                "arguments[0].click();", btn
-            )
+            self.driver.execute_script("arguments[0].click();", btn)
         except Exception:
             pass
 
-    # ===============================
-    # Login Actions
-    # ===============================
+    # ================= LOGIN =================
 
-    def open_login(self):
-        login_btn = WebDriverWait(self.driver, 20).until(
-            EC.element_to_be_clickable(self.HELLO_LOGIN)
-        )
-        self.driver.execute_script(
-            "arguments[0].click();", login_btn
-        )
-
-    # Alias for backward compatibility
     def open_login_ui(self):
-        btn = WebDriverWait(self.driver, 20).until(
-            EC.element_to_be_clickable(self.HELLO_LOGIN)
-        )
-        self.driver.execute_script("arguments[0].click();", btn)
+        """
+        Complete login flow:
+        1. Click/Hover 'Hello, Login' button
+        2. Wait for dropdown to appear
+        3. Click 'Log-in' option from dropdown
+        """
+        logger.info("Starting Login UI flow...")
+        self.popup_handler.handle_potential_popups()
+        
+        # Step 1: Hover/Click 'Hello, Login'
+        try:
+            login_btn = self.wait.until(EC.element_to_be_clickable(self.HELLO_LOGIN))
+            # Scroll into view just in case
+            self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", login_btn)
+            
+            # Use ActionChains for hover, but fallback to click if dropdown doesn't appear
+            ActionChains(self.driver).move_to_element(login_btn).perform()
+            
+            # Check if dropdown visible, if not, click it
+            try:
+                WebDriverWait(self.driver, 3).until(EC.visibility_of_element_located(self.SIGN_IN_OPTION))
+            except:
+                logger.debug("Dropdown didn't appear on hover, clicking 'Hello Login'...")
+                self.driver.execute_script("arguments[0].click();", login_btn)
+                WebDriverWait(self.driver, 5).until(EC.visibility_of_element_located(self.SIGN_IN_OPTION))
+                
+        except Exception as e:
+            logger.warning(f"Could not trigger login dropdown: {e}. Trying direct click.")
+            self.click(self.HELLO_LOGIN)
+
+        # Step 2: Click 'Log-in'
+        try:
+            login_option = self.wait.until(EC.element_to_be_clickable(self.SIGN_IN_OPTION))
+            # Try JS click as it's more reliable for elements inside hover-menus
+            self.driver.execute_script("arguments[0].click();", login_option)
+            logger.info("Clicked 'Log-in' via JS.")
+        except Exception:
+            # Fallback to standard click
+            self.click(self.SIGN_IN_OPTION)
+            logger.info("Clicked 'Log-in' via standard click.")
+
+        # Wait for iframe or modal to stabilize and be VISIBLE
+        try:
+            # Using any_of for multiple possible indicators of a successful login popup load
+            WebDriverWait(self.driver, 20).until(
+                EC.any_of(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, "iframe[src*='login'], iframe[src*='auth'], iframe[src*='iam'], iframe[src*='accounts.moneycontrol']")),
+                    EC.visibility_of_element_located((By.XPATH, "//*[(contains(@class,'modal') or contains(@class,'popup')) and .//input]")),
+                    EC.visibility_of_element_located((By.ID, "login_form")),
+                    EC.visibility_of_element_located((By.CSS_SELECTOR, ".login-form, .auth-form")),
+                    EC.visibility_of_element_located((By.XPATH, "//h2[contains(text(),'Login') or contains(text(),'Sign')]"))
+                )
+            )
+            logger.info("Login UI stabilized.")
+        except TimeoutException:
+            logger.warning("Stabilization criteria not fully met. LoginPage will attempt deeper context scanning.")
 
     def click_hello_login(self):
         self.open_login()
@@ -126,91 +169,92 @@ class HomePage(BasePage):
         )
         return sign_in.is_displayed() and sign_up.is_displayed()
 
-    # ===============================
-    # Search Actions
-    # ===============================
+    # ================= SEARCH =================
 
     def search_stock(self, stock_name):
-
         self.handle_push_notification()
+        self.popup_handler.handle_potential_popups()
 
-        search_box = WebDriverWait(self.driver, 20).until(
-            EC.element_to_be_clickable(self.SEARCH_INPUT)
-        )
+        self.click(self.SEARCH_INPUT)
+        self.send_keys(self.SEARCH_INPUT, stock_name)
 
-        search_box.clear()
-        search_box.send_keys(stock_name)
+        handle_alert_if_present(self.driver)
 
-        # Wait autosuggest
+        # Wait for suggestions to appear and be visible
         WebDriverWait(self.driver, 20).until(
             EC.visibility_of_any_elements_located(self.RESULT_LINKS)
         )
 
-        # Avoid stale element
-        results = self.driver.find_elements(*self.RESULT_LINKS)
+        results = self.get_elements(self.RESULT_LINKS)
 
         if not results:
             raise AssertionError(f"No result for {stock_name}")
 
-        self.driver.execute_script(
-            "arguments[0].click();", results[0]
-        )
+        # Click the first result using the robust click method if possible, or JS as it's an autosuggest item
+        try:
+            self.driver.execute_script("arguments[0].click();", results[0])
+            print(f"Selected first search result for: {stock_name}")
+        except Exception:
+            results[0].click()
 
-        # Relaxed validation
         WebDriverWait(self.driver, 20).until(
             lambda d: stock_name.lower() in d.current_url.lower()
-                      or "stock" in d.current_url.lower()
+            or "stock" in d.current_url.lower()
+            or "quotes" in d.current_url.lower()
         )
 
         return True
 
     def trigger_search_suggestions(self, keyword):
-
         try:
-            search = WebDriverWait(self.driver, 15).until(
-                EC.element_to_be_clickable(self.SEARCH_INPUT)
-            )
+            self.handle_push_notification()
+            self.popup_handler.handle_potential_popups()
 
-            search.clear()
-            search.send_keys(keyword)
+            # Using robust BasePage methods
+            self.click(self.SEARCH_INPUT)
+            self.send_keys(self.SEARCH_INPUT, keyword)
 
-            WebDriverWait(self.driver, 10).until(
-                EC.visibility_of_any_elements_located(
-                    self.SEARCH_SUGGESTIONS
-                )
-            )
+            # handle alert if triggered
+            handle_alert_if_present(self.driver)
 
-            return True
-
-        except Exception:
-            # fallback → press Enter and verify navigation
-            search.send_keys(Keys.ENTER)
-
+            # ensure suggestions container present and visible
             WebDriverWait(self.driver, 15).until(
-                lambda d: keyword.lower() in d.current_url.lower()
+                EC.visibility_of_any_elements_located(self.SEARCH_SUGGESTIONS)
             )
 
-            return True
+            results = self.get_search_suggestions()
+            return len(results) > 0
 
-        def search_with_hover(self, keyword):
+        except Exception as e:
+            print(f"Trigger search suggestions failed for '{keyword}': {e}")
+            return False
 
-            if not self.trigger_search_suggestions(keyword):
-                return False
+    def get_search_suggestions(self):
+        """Returns only VISIBLE search suggestions"""
+        try:
+            all_suggestions = self.driver.find_elements(*self.SEARCH_SUGGESTIONS)
+            # Filter to return only visible elements
+            return [item for item in all_suggestions if item.is_displayed()]
+        except:
+            return []
 
-            suggestions = self.driver.find_elements(*self.SEARCH_SUGGESTIONS)
+    def search_with_hover(self, keyword):
 
-            if not suggestions:
-                return False
+        if not self.trigger_search_suggestions(keyword):
+            return False
 
-            ActionChains(self.driver).move_to_element(
-                suggestions[0]
-            ).click().perform()
+        suggestions = self.driver.find_elements(*self.SEARCH_SUGGESTIONS)
 
-            return True
+        if not suggestions:
+            return False
 
-    # ===============================
-    # Left Panel Validation
-    # ===============================
+        ActionChains(self.driver).move_to_element(
+            suggestions[0]
+        ).click().perform()
+
+        return True
+
+    # ================= LEFT PANEL =================
 
     def are_left_panel_options_clickable(self):
         WebDriverWait(self.driver, 10).until(

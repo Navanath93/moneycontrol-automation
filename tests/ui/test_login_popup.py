@@ -10,7 +10,7 @@ def test_login_dropdown_and_modal(driver):
     home = HomePage(driver)
     home.open_home_page()
 
-    home.open_login()
+    home.open_login_ui()
 
     wait = WebDriverWait(driver, 20)
 
