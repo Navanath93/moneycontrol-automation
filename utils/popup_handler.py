@@ -28,11 +28,10 @@ class PopupHandler:
         self.driver = driver
 
     def handle_potential_popups(self):
-        """
-        Checks for known popups and closes them if visible.
-        Switches to default content to ensure global popups are caught.
-        """
+        closed = False
+
         def close_visible_popups():
+            nonlocal closed
             for selector in [self.COMBINED_POPUP_LOCATOR, self.COMBINED_POPUP_XPATH]:
                 try:
                     elements = self.driver.find_elements(*selector)
@@ -40,22 +39,15 @@ class PopupHandler:
                         if element.is_displayed():
                             logger.info("Popup found and closed.")
                             self.driver.execute_script("arguments[0].click();", element)
-                            return True
-                except Exception:
-                    continue
-            return False
+                            closed = True
+                except Exception as e:
+                    logger.debug(f"Popup handling error: {e}")
+            return closed
 
-        # 1. Check in current context
+        self.driver.switch_to.default_content()
         close_visible_popups()
-
-        # 2. Check in default content
-        try:
-            # Note: caller will need to re-switch to iframe if they were in one
-            self.driver.switch_to.default_content()
-            close_visible_popups()
-            self.remove_blocking_overlays()
-        except Exception:
-            pass
+        self.remove_blocking_overlays()
+        return closed
 
     def handle_iframe_popups(self):
         """

@@ -9,46 +9,50 @@ from utils.cache_manager import CacheManager
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
-    handlers=[
-        logging.StreamHandler()
-    ]
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[logging.StreamHandler()]
 )
 logger = logging.getLogger(__name__)
+
 
 def pytest_addoption(parser):
     parser.addoption("--browser", action="store", default="chrome")
     parser.addoption("--headless", action="store_true", default=False)
     parser.addoption("--clear-cache", action="store_true", default=False, help="Clear cache before run")
 
+
 def pytest_sessionstart(session):
     """Called before the first test starts."""
     logger.info("Starting Automation Test Session")
-    CacheManager.clear_pytest_cache()
-    
+
+    if session.config.getoption("--clear-cache"):
+        CacheManager.clear_pytest_cache()
+
     # Ensure reports directory structure exists
     os.makedirs("reports", exist_ok=True)
     os.makedirs(os.path.join("reports", "screenshots"), exist_ok=True)
+
 
 @pytest.fixture(scope="class")
 def driver(request):
     browser = request.config.getoption("--browser")
     headless = request.config.getoption("--headless")
-    
+
     # Initialize driver
     _driver = get_driver(browser, headless)
-    _driver.implicitly_wait(2) # Reduced safety net implicit wait
-    
+    _driver.implicitly_wait(5)  # safer default implicit wait
+
     # Attach driver to class if available
     if request.cls is not None:
         request.cls.driver = _driver
-        
+
     yield _driver
 
     try:
         _driver.quit()
     except Exception:
         pass
+
 
 @pytest.hookimpl(hookwrapper=True)
 def pytest_runtest_makereport(item, call):
@@ -75,13 +79,13 @@ def pytest_runtest_makereport(item, call):
         # 1. Attach Screenshot to Allure
         screenshot_bytes = driver.get_screenshot_as_png()
         allure.attach(
-            screenshot_bytes, 
-            name=f"Screenshot_{test_name}_{timestamp}", 
+            screenshot_bytes,
+            name=f"Screenshot_{test_name}_{timestamp}",
             attachment_type=allure.attachment_type.PNG
         )
 
         logger.error(f"Test Failed: {test_name}. Screenshot attached to report.")
-        
+
         # Local backup for direct troubleshooting
         screenshot_path = os.path.join("reports", "screenshots", f"{test_name}_{timestamp}.png")
         driver.save_screenshot(screenshot_path)

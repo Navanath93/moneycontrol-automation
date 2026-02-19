@@ -38,20 +38,20 @@ class BasePage:
 
     def send_keys(self, locator, value):
         try:
-            element = self.wait.until(EC.visibility_of_element_located(locator))
+            element = self.wait.until(EC.element_to_be_clickable(locator))
             self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
             element.clear()
             element.send_keys(value)
         except Exception as e:
             logger.warning(f"Input failed for {locator}. Attempting recovery...")
             self.popup_handler.handle_potential_popups()
+            self.switch_to_default()  # ensure we’re not stuck in wrong iframe
             try:
-                # Use presence first on retry, then visibility
-                element = self.wait.until(EC.presence_of_element_located(locator))
-                self.driver.execute_script("arguments[0].scrollIntoView({block: 'center'});", element)
+                element = self.wait.until(EC.element_to_be_clickable(locator))
                 element.clear()
                 element.send_keys(value)
             except Exception:
+                self.driver.save_screenshot("reports/screenshots/input_failure.png")
                 logger.error(f"Failed to send keys to {locator} after recovery effort.")
                 raise e
 
