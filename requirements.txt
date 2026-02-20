@@ -5,4 +5,3 @@ requests
 allure-pytest
 webdriver-manager
 pytest-html
-allure-pytest
